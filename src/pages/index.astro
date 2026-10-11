@@ -1,0 +1,37 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import HeroWords from '../components/HeroWords.astro';
+import ArticleList from '../components/ArticleList.astro';
+import { articlePreviews, type ArticlePreview } from '../data/article-previews';
+import { site } from '../data/site';
+import { publishedPosts } from '../lib/posts';
+
+const posts = (await publishedPosts()).slice(0, 5);
+const showingPreviews = posts.length === 0;
+const articles: ArticlePreview[] = showingPreviews
+  ? articlePreviews
+  : posts.map(({ id, data }) => ({
+      id,
+      title: data.title,
+      description: data.description,
+      pubDate: data.pubDate,
+      category: data.category,
+    }));
+---
+<BaseLayout title={site.title} description={site.description} home>
+  <section class="hero border-base-300 py-8 md:py-18" aria-labelledby="intro-title">
+    <div class="hero-content w-full max-w-none flex-col items-start gap-0 p-0 md:items-start">
+      <div class="w-full min-w-0">
+        <h1 id="intro-title" class="text-5xl font-normal">
+          <span class="block">Hi, I'm Mingqing Teng.</span>
+          <HeroWords words={site.heroWords} />
+        </h1>
+        <p class="my-2 max-w-[60rem] text-base leading-[1.7] text-muted">{site.description}</p>
+        {site.links.length > 0 && <div class="flex flex-wrap gap-4 md:gap-4">{site.links.map(link => <a class="link link-hover" href={link.url}>{link.label} ↗</a>)}</div>}
+      </div>
+    </div>
+  </section>
+  <section class="max-w-225" aria-labelledby="latest-articles-title">
+    <ArticleList articles={articles} />
+  </section>
+</BaseLayout>

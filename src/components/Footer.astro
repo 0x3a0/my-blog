@@ -1,0 +1,8 @@
+---
+import { site } from '../data/site';
+---
+<footer class="footer footer-vertical mx-auto w-[calc(100%_-_2.5rem)] max-w-[1280px] justify-between gap-4 border-t border-base-300 pt-[1.8rem] pb-10 text-xs text-muted md:footer-horizontal md:w-[calc(100%_-_4rem)]">
+  <aside><p>© {new Date().getFullYear()} {site.title}</p></aside>
+  {site.links.length > 0 && <nav aria-label="页脚公开链接" class="md:justify-self-end"><div class="flex flex-wrap gap-4 md:gap-4">{site.links.map(link => <a class="link link-hover" href={link.url}>{link.label}</a>)}</div></nav>}
+</footer>
+

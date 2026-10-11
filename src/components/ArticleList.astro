@@ -1,0 +1,29 @@
+---
+import type { ArticlePreview } from '../data/article-previews';
+import { formatDate } from '../lib/posts';
+
+interface Props {
+  articles: ArticlePreview[];
+}
+
+const { articles } = Astro.props;
+---
+
+<ul class="list [@media(hover:hover)]:[&:has(>.list-row:hover)>.list-row:not(:hover)]:opacity-30">
+  {articles.map(article => (
+    <li class="list-row rounded-none px-0 py-13 transition-opacity duration-200 ease-out after:inset-x-0 after:border-base-300 motion-reduce:transition-none md:py-15">
+      <article class="flex flex-col list-col-grow min-w-0" aria-labelledby={`article-${article.id}`}>
+        <div class="items-baseline text-sm text-base-content/65">
+          <time datetime={article.pubDate.toISOString()}>{formatDate(article.pubDate)}</time>
+        </div>
+        <h3 id={`article-${article.id}`} class="my-2 text-2xl leading-snug font-bold tracking-tight text-base-content md:my-3 md:text-3xl">
+          {article.href
+            ? <a class="link link-hover" href={article.href}>{article.title}</a>
+            : article.title}
+        </h3>
+        <p class="mt-2 text-base leading-[1.7] text-base-content/65">{article.description}</p>
+        <span class="badge badge-ghost badge-sm mt-4 self-start rounded-md text-base-content/55 leading-none p-1">{article.category}</span>
+      </article>
+    </li>
+  ))}
+</ul>

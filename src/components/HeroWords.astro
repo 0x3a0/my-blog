@@ -1,0 +1,92 @@
+---
+interface Props { words: string[] }
+const phrases = Astro.props.words.map(word => word.trim()).filter(Boolean);
+if (!phrases.length) throw new Error('HeroWords 至少需要一个非空词组');
+---
+<hero-words class="mt-2 inline-flex max-w-full text-[42px] font-normal" data-words={JSON.stringify(phrases)}>
+  <span class="sr-only">{phrases.join('、')}。</span>
+  <span class="relative inline-grid whitespace-nowrap" aria-hidden="true">
+    {phrases.map(phrase => <span class="invisible [grid-area:1/1]">&lt;{phrase}/&gt;<span class="ml-1 font-normal">|</span></span>)}
+    <span class="absolute inset-0">
+      <span>&lt;</span>
+      <span data-text>{phrases[0]}</span>
+      <span class="ml-0.5 mr-0.5 animate-cursor-blink font-normal text-accent motion-reduce:animate-none [&[hidden]]:hidden" data-cursor hidden>|</span>
+      <span>/&gt;</span>
+    </span>
+  </span>
+</hero-words>
+<script>
+  const TIMING = { typing: 120, deleting: 70, pause: 2200, initial: 250 };
+
+  class HeroWords extends HTMLElement {
+    private words: string[][] = [];
+    private text: HTMLElement | null = null;
+    private cursor: HTMLElement | null = null;
+    private preference = matchMedia('(prefers-reduced-motion: reduce)');
+    private observer?: IntersectionObserver;
+    private timer?: number;
+    private visible = false;
+    private running = false;
+    private word = 0;
+    private length = 0;
+    private deleting = false;
+
+    connectedCallback() {
+      this.words = (JSON.parse(this.dataset.words ?? '[]') as string[]).map(word => Array.from(word));
+      this.text = this.querySelector('[data-text]');
+      this.cursor = this.querySelector('[data-cursor]');
+      this.preference.addEventListener('change', this.sync);
+      document.addEventListener('visibilitychange', this.sync);
+      this.observer = new IntersectionObserver(([entry]) => {
+        this.visible = entry?.isIntersecting ?? false;
+        this.sync();
+      });
+      this.observer.observe(this);
+    }
+
+    disconnectedCallback() {
+      this.stop();
+      this.observer?.disconnect();
+      this.preference.removeEventListener('change', this.sync);
+      document.removeEventListener('visibilitychange', this.sync);
+    }
+
+    private stop() {
+      window.clearTimeout(this.timer);
+      this.running = false;
+      if (this.text) this.text.textContent = this.words[0]?.join('') ?? '';
+      if (this.cursor) this.cursor.hidden = true;
+    }
+
+    private sync = () => {
+      const active = this.visible && !document.hidden && !this.preference.matches && this.words.length > 1;
+      if (!active) { this.stop(); return; }
+      if (this.running) return;
+      this.running = true;
+      this.word = 0;
+      this.length = 0;
+      this.deleting = false;
+      if (this.text) this.text.textContent = '';
+      if (this.cursor) this.cursor.hidden = false;
+      this.timer = window.setTimeout(this.tick, TIMING.initial);
+    };
+
+    private tick = () => {
+      if (!this.running || !this.text) return;
+      const phrase = this.words[this.word]!;
+      this.length += this.deleting ? -1 : 1;
+      this.text.textContent = phrase.slice(0, this.length).join('');
+      let delay = this.deleting ? TIMING.deleting : TIMING.typing;
+      if (!this.deleting && this.length === phrase.length) {
+        this.deleting = true;
+        delay = TIMING.pause;
+      } else if (this.deleting && this.length === 0) {
+        this.deleting = false;
+        this.word = (this.word + 1) % this.words.length;
+        delay = TIMING.initial;
+      }
+      this.timer = window.setTimeout(this.tick, delay);
+    };
+  }
+  if (!customElements.get('hero-words')) customElements.define('hero-words', HeroWords);
+</script>
