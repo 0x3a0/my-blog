@@ -13,3 +13,5 @@
 | [#8](https://github.com/0x3a0/my-blog/issues/8) · [说明](./07-daily-notion-publication.md) | 每日自动发布 | #4、#5、#6、#7 |
 
 代码及可控返回测试已实现；真实文章本地同步通过。剩余真实图片、作者修改/撤回、GitHub 配置与线上部署见[验收记录](../NOTION_ACCEPTANCE.md)。各任务的最新状态以 GitHub 为准，父规格的标题、正文和状态保持不变。
+
+本轮 #2、#3、#5、#7 已验收关闭；#4、#6、#8 保持开放并标记 ready-for-human，记录各自未完成的真实验收。实现与修复提交在本地 main，尚未推送远程。
