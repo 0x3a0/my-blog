@@ -5,6 +5,7 @@ import { z } from 'astro/zod';
 import { publishSnapshot } from './index.ts';
 import { prepareContent } from './content.ts';
 import { convertNotionMarkdown } from './notion-markdown.ts';
+import { notionIdSchema as uuid, publicationSchema, type Publication } from './notion-state.ts';
 
 export interface NotionSource {
   retrieveDatabase(id: string): Promise<unknown>;
@@ -23,9 +24,8 @@ export interface NotionSyncOptions {
   outputDir: string;
   siteBase: string;
   siteUrl: string;
-  previousPublication?: { source: string; articles: string[] };
+  previousPublication?: Publication;
 }
-const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).transform(s => s.toLowerCase());
 const property = z.looseObject({ type: z.string() });
 const pageSchema = z.object({
   object: z.literal('page'), id: uuid, url: z.string(), last_edited_time: z.iso.datetime({ offset: true }),
@@ -215,7 +215,7 @@ export async function syncNotion(options: NotionSyncOptions) {
       const fingerprint = createHash('sha256').update(databaseId + ':' + dataSource.id).digest('hex');
       let previous: unknown;
       if (options.previousPublication) {
-        const supplied = z.object({ source: z.string().regex(/^[0-9a-f]{64}$/), articles: z.array(uuid) }).parse(options.previousPublication);
+        const supplied = publicationSchema.parse(options.previousPublication);
         if (supplied.source !== fingerprint) throw new Error('线上文章库身份与本次来源不一致，停止发布。');
         previous = { databaseId, dataSourceId: dataSource.id, articles: supplied.articles };
       } else {
@@ -246,7 +246,7 @@ export async function syncNotion(options: NotionSyncOptions) {
         try { body = await convertNotionMarkdown(article.body, published); } catch (error) {
           throw new Error(`文章 ${page.id}：${error instanceof Error ? error.message : '正文转换失败。'}`);
         }
-        const content = await prepareContent({ id: page.id, body, format: 'markdown', source: options.source, publicDir, siteBase: options.siteBase, imageCache });
+        const content = await prepareContent({ id: page.id, body, source: options.source, publicDir, siteBase: options.siteBase, imageCache });
         await writeFile(join(contentDir, page.id + '.md'), '---\n' + JSON.stringify(article.data) + '\n---\n' + content.body);
       }
       articleCount = chosen.length;

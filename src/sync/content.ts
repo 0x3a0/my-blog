@@ -1,17 +1,14 @@
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import sharp from 'sharp';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkStringify from 'remark-stringify';
-import rehypeParse from 'rehype-parse';
-import rehypeSanitize from 'rehype-sanitize';
-import rehypeRemark from 'rehype-remark';
 import type { Root, RootContent, Definition } from 'mdast';
 
 const markdown = unified().use(remarkParse).use(remarkGfm).use(remarkStringify);
-const html = unified().use(rehypeParse, { fragment: true }).use(rehypeSanitize).use(rehypeRemark).use(remarkGfm).use(remarkStringify);
 
 function visit(node: Root | RootContent, action: (node: Root | RootContent) => void) {
   action(node);
@@ -29,12 +26,8 @@ function imageExtension(bytes: Uint8Array, contentType: string) {
   throw new Error('必需图片格式不支持或内容校验失败。');
 }
 
-export async function prepareContent(input: { body: string; format: 'markdown' | 'html'; id: string; source: { image(url: string): Promise<{ bytes: Uint8Array; contentType: string }> }; publicDir: string; siteBase: string; imageCache: Map<string, string> }) {
-  let body = input.body.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
-  if (input.format === 'html') {
-    if (/<(?:iframe|embed|object|script|video|audio)\b/i.test(body)) throw new Error(`文章 ${input.id} 包含无法可靠转换的嵌入内容。`);
-    body = String(await html.process(body));
-  }
+export async function prepareContent(input: { body: string; id: string; source: { image(url: string): Promise<{ bytes: Uint8Array; contentType: string }> }; publicDir: string; siteBase: string; imageCache: Map<string, string> }) {
+  const body = input.body.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   const tree = markdown.parse(body);
   const definitions = new Map<string, Definition>();
   visit(tree, node => { if (node.type === 'definition') definitions.set(node.identifier.toLowerCase(), node); });
@@ -49,15 +42,25 @@ export async function prepareContent(input: { body: string; format: 'markdown' |
     }
   });
   const replacements = new Map<string, string>();
+  let resourceNumber = 0;
   for (const url of imageUrls) {
+    resourceNumber++;
+    const resourceLabel = `文章 ${input.id} 的必需图片（资源 ${resourceNumber}）`;
     let local = input.imageCache.get(url);
     if (!local) {
       let resource;
-      try { resource = await input.source.image(url); } catch { throw new Error(`文章 ${input.id} 的必需图片读取失败。`); }
-      const extension = imageExtension(resource.bytes, resource.contentType);
+      try { resource = await input.source.image(url); } catch { throw new Error(`${resourceLabel}读取失败。`); }
+      let extension: string;
+      try {
+        extension = imageExtension(resource.bytes, resource.contentType);
+        // Decode every frame; a plausible file header cannot prove readable image data.
+        await sharp(resource.bytes, { animated: true, failOn: 'warning', limitInputPixels: 40_000_000 }).stats();
+      } catch { throw new Error(`${resourceLabel}格式或内容校验失败。`); }
       const name = createHash('sha256').update(resource.bytes).digest('hex') + '.' + extension;
-      await mkdir(join(input.publicDir, 'article-assets'), { recursive: true });
-      await writeFile(join(input.publicDir, 'article-assets', name), resource.bytes);
+      try {
+        await mkdir(join(input.publicDir, 'article-assets'), { recursive: true });
+        await writeFile(join(input.publicDir, 'article-assets', name), resource.bytes);
+      } catch { throw new Error(`${resourceLabel}持久化保存失败。`); }
       local = input.siteBase.replace(/\/?$/, '/') + 'article-assets/' + name;
       input.imageCache.set(url, local);
     }
@@ -66,7 +69,7 @@ export async function prepareContent(input: { body: string; format: 'markdown' |
   visit(tree, node => {
     if (node.type === 'image') node.url = replacements.get(node.url) || node.url;
     if (node.type === 'definition' && replacements.has(node.url)) node.url = replacements.get(node.url)!;
-    if (node.type === 'link' && /^(?:javascript|data|vbscript):/i.test(node.url)) throw new Error(`文章 ${input.id} 存在无法发布的链接。`);
+    if ((node.type === 'link' || node.type === 'definition') && /^(?:javascript|data|vbscript):/i.test(node.url)) throw new Error(`文章 ${input.id} 存在无法发布的链接。`);
   });
   return { body: markdown.stringify(tree) };
 }

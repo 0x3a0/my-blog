@@ -1,6 +1,6 @@
 import { syncNotion } from '../src/sync/notion.ts';
 import { createNotionSource } from '../src/sync/notion-client.ts';
-import { z } from 'astro/zod';
+import { publicationSchema } from '../src/sync/notion-state.ts';
 
 async function publishedState(siteUrl: string, siteBase: string) {
   const base = siteBase.replace(/\/?$/, '/');
@@ -11,7 +11,7 @@ async function publishedState(siteUrl: string, siteBase: string) {
   if (!response.ok) throw new Error(`线上发布清单读取失败（HTTP ${response.status}）；首次接入需手动选择 initialize，其他情况请先恢复清单。`);
   let payload: unknown;
   try { payload = await response.json(); } catch { throw new Error('线上发布清单不是有效 JSON，停止发布。'); }
-  const parsed = z.object({ version: z.literal(1), source: z.string().regex(/^[0-9a-f]{64}$/), articles: z.array(z.string().regex(/^[0-9a-f-]{36}$/)) }).safeParse(payload);
+  const parsed = publicationSchema.safeParse(payload);
   if (!parsed.success) throw new Error('线上发布清单无效，停止发布。');
   return parsed.data;
 }

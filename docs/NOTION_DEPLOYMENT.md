@@ -25,4 +25,3 @@ Settings → Pages 的 Source 选择 GitHub Actions。不要在 Variables 中保
 同步后只上传 `.artifacts/notion-published/site`，部署依赖整个构建成功；任一必需文章、图片或构建失败时不上传、不更新线上站点。内部清单和 Token 不属于上传内容。
 
 验证首页、`blogs`、文章详情与静态图片能匿名打开，然后完成[真实验收](./NOTION_ACCEPTANCE.md)。流程失败时先查看对应文章和内容类型，不要用首次初始化绕过错误。
-

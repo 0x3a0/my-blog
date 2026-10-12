@@ -16,5 +16,6 @@
 
 运行 `pnpm notion:sync`，成功结果位于 `.artifacts/notion-published/site`。文章正文、图片及内部清单均位于 Git 忽略路径。普通 `pnpm build` 不主动连接 Notion；正式发布使用[每日发布入口](./NOTION_DEPLOYMENT.md)。
 
-内容支持及失败条件见[规格](./spec/API_CONTRACT.md)与[验收记录](./NOTION_ACCEPTANCE.md)。
+本地预览已同步站点，在 PowerShell 设置 `$env:BLOG_OUT_DIR='.artifacts/notion-published/site'`、`$env:SITE_BASE='/my-blog/'`，再运行 `pnpm preview`，打开 `http://localhost:4321/my-blog/`。预览不会重新读取 Notion。
 
+内容支持及失败条件见[规格](./spec/API_CONTRACT.md)与[验收记录](./NOTION_ACCEPTANCE.md)。

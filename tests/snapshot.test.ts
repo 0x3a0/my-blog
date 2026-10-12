@@ -39,13 +39,13 @@ test('图片与结构保留，资源失败和构建失败均保留整个旧快�
   const workspace = await mkdtemp(join(process.cwd(), '.artifacts/resources-test-'));
   t.after(() => rm(workspace, { recursive: true, force: true }));
   const outputDir = join(workspace, 'published');
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=', 'base64');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==', 'base64');
   let imageFailed = false;
   const options = {
     outputDir, siteBase: '/my-blog/', siteUrl: 'https://example.com',
     async prepare({ contentDir, publicDir }: { contentDir: string; publicDir: string }) {
       const prepared = await prepareContent({
-        id: 'article-rich', format: 'markdown', publicDir, siteBase: '/my-blog/', imageCache: new Map(),
+        id: 'article-rich', publicDir, siteBase: '/my-blog/', imageCache: new Map(),
         body: '## 阅读\n\n![图片](https://images.example.com/one.png)\n\n```ts\nconst answer = 42;\n```\n\n| 项目 | 数值 |\n| --- | --- |\n| 结果 | 42 |\n\n> 引用文字',
         source: { async image() { if (imageFailed) throw new Error('资源不可用'); return { bytes: png, contentType: 'image/png' }; } },
       });
@@ -69,7 +69,7 @@ test('图片与结构保留，资源失败和构建失败均保留整个旧快�
   assert.match(detail, /<blockquote>/);
   assert.doesNotMatch(detail, /images\.example\.com/);
   imageFailed = true;
-  await assert.rejects(publishSnapshot(options), /必需图片读取失败/);
+  await assert.rejects(publishSnapshot(options), /article-rich.*必需图片.*资源 1.*读取失败/);
   imageFailed = false;
   await assert.rejects(publishSnapshot({ ...options, siteUrl: 'invalid-site-url' }));
   assert.equal(await readFile(detailPath, 'utf8'), detail);

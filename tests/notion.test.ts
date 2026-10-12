@@ -121,7 +121,7 @@ test('属性清空、缺省、未来日期及跨年时间按作者 Published 展
 test('图片保存为持久公开资源，签名变化去重，图片失败保留整站', async t => {
   const options = await workspace(t);
   const notion = source();
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=', 'base64');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==', 'base64');
   let unavailable = false;
   const images = { ...notion, async image() { if (unavailable) throw new Error('temporary source expired'); return { bytes: png, contentType: 'image/png' }; } };
   notion.bodies.set(articleId, '## 图片\n\n![山间的日落](https://images.example.com/a.png?signature=first)\n\n图片之后的段落。');
@@ -142,6 +142,11 @@ test('图片保存为持久公开资源，签名变化去重，图片失败保�
   await assert.rejects(syncNotion({ ...options, source: images }), /33333333.*图片/);
   assert.equal(await readFile(detailPath, 'utf8'), previous);
   assert.deepEqual(await readFile(join(options.outputDir, 'site', asset[1])), png);
+  for (const bytes of [png.subarray(0, 8), Buffer.from([255, 216, 255])]) {
+    const damaged = { ...notion, async image() { return { bytes, contentType: bytes.length === 8 ? 'image/png' : 'image/jpeg' }; } };
+    await assert.rejects(syncNotion({ ...options, source: damaged }), /33333333.*图片.*资源 1.*校验/);
+    assert.equal(await readFile(detailPath, 'utf8'), previous);
+  }
 });
 
 test('提示框、分栏、表格和代码保留阅读顺序，只有选中文章转博客链接', async t => {
@@ -158,6 +163,7 @@ test('提示框、分栏、表格和代码保留阅读顺序，只有选中文�
     '[带锚点的文章](' + next.url + '#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)', '',
     '<page url="https://www.notion.so/66666666666646668666666666666666">私密子页</page>', '',
     '正文中的 <span color="red" underline="true">强调</span><br>换行', '',
+    'NOTIONCODE0TOKEN 与 `NOTIONCODE1TOKEN` 原样保留。', '',
     '<table_of_contents/>',
   ].join('\n'));
   await syncNotion({ ...options, source: notion });
@@ -174,12 +180,28 @@ test('提示框、分栏、表格和代码保留阅读顺序，只有选中文�
   assert.match(html, /href="https:\/\/www.notion.so\/66666666666646668666666666666666"/);
   await assert.rejects(readFile(join(options.outputDir, 'site/blog/66666666-6666-4666-8666-666666666666/index.html')), { code: 'ENOENT' });
   assert.match(html, /href="#阅读指南"/);
+  assert.match(html, /NOTIONCODE0TOKEN 与 <code>NOTIONCODE1TOKEN<\/code> 原样保留/);
   assert.doesNotMatch(html, /\{color=|<columns>|<callout>|<unknown\/>/);
   for (const unsupported of ['$$\nx^2\n$$', '<video src="https://example.com/v.mp4">视频</video>', '<pdf src="https://example.com/a.pdf">资料</pdf>', '<custom-block definition-id="123"/>']) {
     notion.bodies.set(articleId, unsupported);
     await assert.rejects(syncNotion({ ...options, source: notion }), /33333333.*(?:公式|video|pdf|custom-block)/);
     assert.equal(await readFile(detailPath, 'utf8'), html);
   }
+});
+
+test('列表内的提示框保留所属结构，日期提及保留时间、时区和区间', async t => {
+  const options = await workspace(t);
+  const notion = source();
+  notion.bodies.set(articleId, [
+    '- 第一项', '\t<callout>', '\t\t子提示', '\t</callout>', '- 第二项', '',
+    '<mention-date start="2026-10-12" startTime="10:30" timeZone="Asia/Shanghai"/>', '',
+    '<mention-date start="2026-10-12" end="2026-10-15"/>',
+  ].join('\n'));
+  await syncNotion({ ...options, source: notion });
+  const html = await readFile(join(options.outputDir, 'site/blog', articleId, 'index.html'), 'utf8');
+  assert.match(html, /<li>\s*<p>第一项<\/p>\s*<blockquote>\s*<p>子提示<\/p>\s*<\/blockquote>\s*<\/li>/);
+  assert.match(html, /2026-10-12 10:30 \(Asia\/Shanghai\)/);
+  assert.match(html, /2026-10-12 – 2026-10-15/);
 });
 
 test('撤回需要明确证据；混合同步失败保留整站，空正文和可信空集合可提交', async t => {
@@ -298,7 +320,7 @@ test('资源读取期间取消勾选不会发布旧选择，并发任务也不�
   notion.bodies.set(articleId, '![读取过程中取消发布](https://example.com/image.png)');
   const changing = { ...notion, async image() {
     notion.pages[0].properties['to-blog-site'].checkbox = false;
-    return { bytes: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=', 'base64'), contentType: 'image/png' };
+    return { bytes: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==', 'base64'), contentType: 'image/png' };
   } };
   await assert.rejects(syncNotion({ ...options, source: changing }), /发布集合.*变化/);
   assert.equal(await readFile(homePath, 'utf8'), html);

@@ -13,6 +13,11 @@ export interface SnapshotOptions {
 const run = promisify(execFile);
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
 
+async function cleanup(path: string, label: string) {
+  try { await rm(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
+  catch { console.warn(`快照${label}清理失败，临时文件保留于 .artifacts，请检查后清理。`); }
+}
+
 export async function publishSnapshot(options: SnapshotOptions) {
   const output = resolve(options.outputDir);
   const target = relative(resolve(projectRoot, '.artifacts'), output);
@@ -45,10 +50,11 @@ export async function publishSnapshot(options: SnapshotOptions) {
       if (movedOld) await rename(backup, output);
       throw error;
     }
-    if (movedOld) await rm(backup, { recursive: true, force: true });
+    // Publication is committed. Housekeeping must not turn that success into a failed sync.
+    if (movedOld) await cleanup(backup, '旧备份');
     return { outputDir: output };
   } finally {
-    if (candidate) await rm(candidate, { recursive: true, force: true });
-    await rm(lock, { recursive: true, force: true });
+    if (candidate) await cleanup(candidate, '候选目录');
+    await cleanup(lock, '互斥锁');
   }
 }
