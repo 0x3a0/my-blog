@@ -1,0 +1,38 @@
+---
+import { render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { publishedPosts, formatDate } from '../../lib/posts';
+import { withBase } from '../../lib/urls';
+
+export async function getStaticPaths() {
+  return (await publishedPosts()).map(post => ({ params: { id: post.id }, props: { post } }));
+}
+const { post } = Astro.props;
+const { Content, headings } = await render(post);
+---
+<BaseLayout title={post.data.title} description={post.data.description}>
+  <article class="mx-auto max-w-5xl">
+    <header class="mb-12 max-w-3xl">
+      <a class="link link-hover text-sm text-base-content/60" href={withBase('blogs/')}>← 全部文章</a>
+      <h1 class="mt-6 text-3xl font-semibold tracking-tight md:text-5xl md:leading-tight">{post.data.title}</h1>
+      <div class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-base-content/60">
+        <span>发布于 <time datetime={post.data.pubDate.toISOString()}>{formatDate(post.data.pubDate)}</time></span>
+        {post.data.updatedDate && <span>更新于 <time datetime={post.data.updatedDate.toISOString()}>{formatDate(post.data.updatedDate)}</time></span>}
+        <span class="badge badge-ghost badge-sm">{post.data.category || '未分组'}</span>
+      </div>
+    </header>
+    <div class="grid min-w-0 gap-12 lg:grid-cols-[minmax(0,1fr)_13rem]">
+      <div class="min-w-0 text-base leading-8 [&_p]:my-5 [&_h1]:mt-12 [&_h1]:text-3xl [&_h2]:mt-10 [&_h2]:mb-4 [&_h2]:text-2xl [&_h2]:font-semibold [&_h3]:mt-8 [&_h3]:mb-3 [&_h3]:text-xl [&_h3]:font-semibold [&_h4]:mt-6 [&_h4]:font-semibold [&_h1]:scroll-mt-8 [&_h2]:scroll-mt-8 [&_h3]:scroll-mt-8 [&_h4]:scroll-mt-8 [&_a]:underline [&_ul]:my-5 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-2 [&_pre]:my-6 [&_pre]:overflow-x-auto [&_pre]:rounded-box [&_pre]:border [&_pre]:border-base-300 [&_pre]:p-5 [&_pre]:text-sm [&_pre]:leading-6 [&_blockquote]:my-6 [&_blockquote]:border-l-2 [&_blockquote]:border-base-300 [&_blockquote]:pl-5 [&_blockquote]:text-base-content/65 [&_table]:my-6 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_th]:border [&_th]:border-base-300 [&_th]:bg-base-200 [&_th]:px-4 [&_th]:py-2 [&_td]:border [&_td]:border-base-300 [&_td]:px-4 [&_td]:py-2 [&_img]:my-6 [&_img]:rounded-box [&_hr]:my-10 [&_hr]:border-base-300">
+        <Content />
+      </div>
+      {headings.length > 0 && <nav aria-label="文章目录" class="order-first lg:order-last">
+        <div class="lg:sticky lg:top-8">
+          <h2 class="mb-3 text-sm font-medium text-base-content/60">文章目录</h2>
+          <ul class="menu menu-sm w-full p-0">
+            {headings.map(heading => <li><a class:list={[heading.depth > 2 && 'pl-6', 'break-words']} href={`#${heading.slug}`}>{heading.text}</a></li>)}
+          </ul>
+        </div>
+      </nav>}
+    </div>
+  </article>
+</BaseLayout>

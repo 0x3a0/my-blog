@@ -2,20 +2,19 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import HeroWords from '../components/HeroWords.astro';
 import ArticleList from '../components/ArticleList.astro';
-import { articlePreviews, type ArticlePreview } from '../data/article-previews';
+import type { ArticlePreview } from '../data/article-previews';
+import { postUrl } from '../lib/urls';
 import { site } from '../data/site';
 import { publishedPosts } from '../lib/posts';
 
 const posts = (await publishedPosts()).slice(0, 5);
-const showingPreviews = posts.length === 0;
-const articles: ArticlePreview[] = showingPreviews
-  ? articlePreviews
-  : posts.map(({ id, data }) => ({
+const articles: ArticlePreview[] = posts.map(({ id, data }) => ({
       id,
       title: data.title,
       description: data.description,
       pubDate: data.pubDate,
-      category: data.category,
+      category: data.category || '未分组',
+      href: postUrl(id),
     }));
 ---
 <BaseLayout title={site.title} description={site.description} home>
@@ -32,6 +31,6 @@ const articles: ArticlePreview[] = showingPreviews
     </div>
   </section>
   <section class="max-w-225" aria-labelledby="latest-articles-title">
-    <ArticleList articles={articles} />
+    {articles.length > 0 ? <ArticleList articles={articles} /> : <p class="py-12 text-base-content/60">还没有发布文章。</p>}
   </section>
 </BaseLayout>

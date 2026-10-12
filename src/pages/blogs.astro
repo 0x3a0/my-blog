@@ -1,0 +1,26 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { publishedPosts, postYear } from '../lib/posts';
+import { postUrl } from '../lib/urls';
+
+const posts = await publishedPosts();
+const years = [...new Set(posts.map(post => postYear(post.data.pubDate)))].sort((a, b) => b - a);
+---
+<BaseLayout title="全部文章" description="按年份浏览所有博客文章。">
+  <section class="mx-auto max-w-5xl" aria-labelledby="archive-title">
+    <h1 id="archive-title" class="mb-12 text-3xl font-semibold tracking-tight md:mb-20 md:text-4xl">全部文章</h1>
+    {years.length === 0 && <p class="text-base-content/60">还没有发布文章。</p>}
+    {years.map(year => <section class="mb-16 grid gap-5 md:mb-24 md:grid-cols-[8rem_minmax(0,1fr)] md:gap-12" aria-labelledby={`year-${year}`}>
+      <h2 id={`year-${year}`} class="text-sm font-medium md:py-5">{year}</h2>
+      <ul class="list">
+        {posts.filter(post => postYear(post.data.pubDate) === year).map(post => <li class="list-row grid-cols-1 rounded-none p-0">
+          <a href={postUrl(post.id)} class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-2 py-5 text-sm md:grid-cols-[minmax(0,1fr)_8rem_1rem]">
+            <span class="col-start-1 row-start-1 font-medium">{post.data.title}</span>
+            <span class="col-start-1 row-start-2 text-xs text-base-content/60 md:col-start-2 md:row-start-1">{post.data.category || '未分组'}</span>
+            <span class="col-start-2 row-start-1 md:col-start-3" aria-hidden="true">↗</span>
+          </a>
+        </li>)}
+      </ul>
+    </section>)}
+  </section>
+</BaseLayout>

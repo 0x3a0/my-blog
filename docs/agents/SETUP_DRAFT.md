@@ -4,4 +4,4 @@
 
 仓库缺少的四个状态标签已创建，已有 wontfix 保留；五个默认状态标签均已就绪。
 
-博客功能规格已发布为 [GitHub Issue #1](https://github.com/0x3a0/my-blog/issues/1)，并标记为 ready-for-agent。功能及真实语雀接口验证尚待实现阶段完成。
+GitHub Issue #1 是先前版本，当前以 [Notion 需求记录](../NOTION_REQUIREMENTS.md)及[规格](../spec/README.md)为依据；讨论完成后更新远程规格和任务。

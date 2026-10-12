@@ -1,22 +1,16 @@
-# 博客实现任务草案
+# Notion 实现任务
 
-状态：待确认任务粒度与依赖，尚未发布子任务。依据 [GitHub 规格 Issue #1](https://github.com/0x3a0/my-blog/issues/1) 与[本地规格](../spec/README.md)。
+来源：[正式规格](../spec/README.md)及[GitHub Issue #1](https://github.com/0x3a0/my-blog/issues/1)。七项任务已发布为该规格的原生子任务，并建立原生阻塞关系。
 
-| 编号 | 交付结果 | 前置任务 |
+| 任务 | 交付 | 直接阻塞 |
 | --- | --- | --- |
-| 1 | [从首页进入可阅读的文章详情页](./01-article-reading.md) | 无 |
-| 2 | [将一篇选定的语雀文章同步到可阅读详情页](./02-first-yuque-article.md) | 1 |
-| 3 | [同步完整发布分组并正确撤回文章](./03-publication-selection.md) | 2 |
-| 4 | [让语雀正文元数据控制博客摘要与分类](./04-article-metadata.md) | 2 |
-| 5 | [公开阅读语雀文章图片与结构化正文](./05-rich-article-reading.md) | 2 |
-| 6 | [通过 Header 的 blogs 浏览按年归档](./06-yearly-archive.md) | 1 |
-| 7 | [让更新与撤回只在整次同步成功后生效](./07-atomic-sync.md) | 3、4、5 |
-| 8 | [每天自动同步并完整发布到 GitHub Pages](./08-daily-deployment.md) | 6、7 |
+| [#2](https://github.com/0x3a0/my-blog/issues/2) · [说明](./01-first-notion-article.md) | 首篇完整同步 | 无 |
+| [#3](https://github.com/0x3a0/my-blog/issues/3) · [说明](./02-properties-and-dates.md) | 属性与日期 | #2 |
+| [#4](https://github.com/0x3a0/my-blog/issues/4) · [说明](./03-persistent-article-images.md) | 图片持久化 | #2 |
+| [#5](https://github.com/0x3a0/my-blog/issues/5) · [说明](./04-notion-content-and-links.md) | 正文与文章链接 | #2 |
+| [#6](https://github.com/0x3a0/my-blog/issues/6) · [说明](./05-withdrawal-and-failure-protection.md) | 撤回与失败保护 | #2 |
+| [#7](https://github.com/0x3a0/my-blog/issues/7) · [说明](./06-real-article-archive-and-reading.md) | 首页、详情、按年归档 | #3 |
+| [#8](https://github.com/0x3a0/my-blog/issues/8) · [说明](./07-daily-notion-publication.md) | 每日自动发布 | #4、#5、#6、#7 |
 
-最先可执行任务为 1；任务 1 完成后，任务 2 与 6 可并行；任务 2 完成后，任务 3、4、5 可并行。任务 7 汇合完整同步规则，任务 8 汇合归档与可靠发布。
+代码及可控返回测试已实现；真实文章本地同步通过。剩余真实图片、作者修改/撤回、GitHub 配置与线上部署见[验收记录](../NOTION_ACCEPTANCE.md)。各任务的最新状态以 GitHub 为准，父规格的标题、正文和状态保持不变。
 
-每项都附验收要求与对应用户故事，覆盖全部 60 项。任务内逐步补齐测试，复用“一次同步与静态构建”入口。现有代码可直接扩展，必要的小调整在首个相关任务中完成，无需独立的大范围预重构。
-
-任务 2 的真实接口验证需要可用知识库、代表文章与读取权限；缺失时明确记录外部前提，页面任务 1、6 可继续。任务 8 在全部前置验收通过后启用每日线上同步。
-
-确认后按依赖顺序发布为 Issue #1 的子任务，应用 ready-for-agent 并设置原生阻塞关系；平台能力不足时在任务正文写明关系。父规格的正文、状态与标签保持原样。

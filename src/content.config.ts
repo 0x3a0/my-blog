@@ -1,10 +1,11 @@
 import { defineCollection } from 'astro:content';
 import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
+import { pathToFileURL } from 'node:url';
 
 const blog = defineCollection({
   loader: glob({
-    base: './src/content/blog', pattern: '**/*.md',
+    base: process.env.BLOG_CONTENT_DIR ? pathToFileURL(process.env.BLOG_CONTENT_DIR + '/') : './src/content/blog', pattern: '**/*.md',
     generateId: ({ entry }) => {
       const id = entry.replace(/\\/g, '/').replace(/\.md$/, '');
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/.test(id)) {
@@ -15,8 +16,8 @@ const blog = defineCollection({
   }),
   schema: z.object({
     title: z.string().trim().min(1),
-    description: z.string().trim().min(1),
-    category: z.string().trim().min(1).default('随笔'),
+    description: z.string().trim().default(''),
+    category: z.string().trim().default(''),
     pubDate: z.coerce.date(),
     updatedDate: z.coerce.date().optional(),
     tags: z.array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)).default([]).transform(tags => [...new Set(tags)]),

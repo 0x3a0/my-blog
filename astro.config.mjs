@@ -10,6 +10,9 @@ export default defineConfig({
   site,
   base,
   trailingSlash: 'always',
+  ...(process.env.BLOG_PUBLIC_DIR ? { publicDir: process.env.BLOG_PUBLIC_DIR } : {}),
+  ...(process.env.BLOG_OUT_DIR ? { outDir: process.env.BLOG_OUT_DIR } : {}),
+  ...(process.env.BLOG_CACHE_DIR ? { cacheDir: process.env.BLOG_CACHE_DIR } : {}),
   markdown: {
     shikiConfig: { theme: 'github-light' },
   },
