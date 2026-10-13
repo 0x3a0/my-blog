@@ -6,8 +6,8 @@ import { publishSnapshot } from '../src/sync/index.ts';
 import { prepareContent } from '../src/sync/content.ts';
 
 test('空分类与摘要通过真实构建，页面显示未分组且不自动补摘要', async t => {
-  await mkdir('.artifacts', { recursive: true });
-  const workspace = await mkdtemp(join(process.cwd(), '.artifacts/snapshot-test-'));
+  await mkdir('.cache/tests', { recursive: true });
+  const workspace = await mkdtemp(join(process.cwd(), '.cache/tests/snapshot-test-'));
   t.after(() => rm(workspace, { recursive: true, force: true }));
   const outputDir = join(workspace, 'published');
   await publishSnapshot({
@@ -15,7 +15,7 @@ test('空分类与摘要通过真实构建，页面显示未分组且不自动�
     async prepare({ contentDir }) {
       await writeFile(join(contentDir, 'article-one.md'), '---\n' + JSON.stringify({
         title: '第一篇文章', description: '', category: '',
-        pubDate: '2025-12-31T16:30:00Z', updatedDate: '2026-01-02T08:00:00Z',
+        pubDate: '2025-12-31T16:30:00Z',
       }) + '\n---\n## 开始\n\n正文不会自动成为摘要。');
     },
   });
@@ -35,8 +35,8 @@ test('空分类与摘要通过真实构建，页面显示未分组且不自动�
 });
 
 test('图片与结构保留，资源失败和构建失败均保留整个旧快照', async t => {
-  await mkdir('.artifacts', { recursive: true });
-  const workspace = await mkdtemp(join(process.cwd(), '.artifacts/resources-test-'));
+  await mkdir('.cache/tests', { recursive: true });
+  const workspace = await mkdtemp(join(process.cwd(), '.cache/tests/resources-test-'));
   t.after(() => rm(workspace, { recursive: true, force: true }));
   const outputDir = join(workspace, 'published');
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==', 'base64');
@@ -78,8 +78,8 @@ test('图片与结构保留，资源失败和构建失败均保留整个旧快�
 });
 
 test('成功提交空快照撤回详情和列表入口，准备失败不会撤回', async t => {
-  await mkdir('.artifacts', { recursive: true });
-  const workspace = await mkdtemp(join(process.cwd(), '.artifacts/withdrawal-test-'));
+  await mkdir('.cache/tests', { recursive: true });
+  const workspace = await mkdtemp(join(process.cwd(), '.cache/tests/withdrawal-test-'));
   t.after(() => rm(workspace, { recursive: true, force: true }));
   const outputDir = join(workspace, 'published');
   const settings = { outputDir, siteBase: '/my-blog/', siteUrl: 'https://example.com' };
@@ -96,4 +96,54 @@ test('成功提交空快照撤回详情和列表入口，准备失败不会撤�
   await assert.rejects(readFile(detailPath), { code: 'ENOENT' });
   assert.match(await readFile(join(outputDir, 'site/index.html'), 'utf8'), /还没有发布文章/);
   assert.doesNotMatch(await readFile(join(outputDir, 'site/blogs/index.html'), 'utf8'), /即将撤回的文章/);
+});
+
+test('工作目录在成功构建后更新文章和图片，失败保留旧内容，撤回移除旧文件', async t => {
+  await mkdir('.cache/tests', { recursive: true });
+  const workspace = await mkdtemp(join(process.cwd(), '.cache/tests/working-copy-test-'));
+  t.after(() => rm(workspace, { recursive: true, force: true, maxRetries: 3 }));
+  const workingCopy = { contentDir: join(workspace, 'src/content/blog'), assetsDir: join(workspace, 'public/article-assets') };
+  const outputDir = join(workspace, 'published');
+  const siteDir = join(workspace, 'dist');
+  const settings = { outputDir, siteDir, workingCopy, siteBase: '/my-blog/', siteUrl: 'https://example.com' };
+  const markdown = '---\n' + JSON.stringify({ title: '工作目录文章', pubDate: '2026-10-01' }) + '\n---\n完整正文。';
+  await publishSnapshot({ ...settings, async prepare({ contentDir, publicDir }) {
+    await writeFile(join(contentDir, 'one.md'), markdown);
+    await mkdir(join(publicDir, 'article-assets'), { recursive: true });
+    await writeFile(join(publicDir, 'article-assets/one.txt'), '持久资源');
+  } });
+  assert.equal(await readFile(join(workingCopy.contentDir, 'one.md'), 'utf8'), markdown);
+  assert.equal(await readFile(join(workingCopy.assetsDir, 'one.txt'), 'utf8'), '持久资源');
+  await assert.rejects(readFile(join(outputDir, 'content/one.md')), { code: 'ENOENT' });
+  const home = await readFile(join(siteDir, 'index.html'), 'utf8');
+  await assert.rejects(publishSnapshot({ ...settings, async prepare() {}, async verify() { throw new Error('最终读取失败'); } }), /最终读取失败/);
+  assert.equal(await readFile(join(workingCopy.contentDir, 'one.md'), 'utf8'), markdown);
+  assert.equal(await readFile(join(workingCopy.assetsDir, 'one.txt'), 'utf8'), '持久资源');
+  assert.equal(await readFile(join(siteDir, 'index.html'), 'utf8'), home);
+  let candidateAssets = '';
+  await assert.rejects(publishSnapshot({ ...settings, async prepare({ contentDir, publicDir }) {
+    await writeFile(join(contentDir, 'new.md'), markdown);
+    candidateAssets = join(publicDir, 'article-assets');
+  }, async verify() {
+    // Reproduce a filesystem failure after the new article directory is installed.
+    await rm(candidateAssets, { recursive: true });
+  } }), { code: 'ENOENT' });
+  assert.equal(await readFile(join(workingCopy.contentDir, 'one.md'), 'utf8'), markdown);
+  await assert.rejects(readFile(join(workingCopy.contentDir, 'new.md')), { code: 'ENOENT' });
+  assert.equal(await readFile(join(workingCopy.assetsDir, 'one.txt'), 'utf8'), '持久资源');
+  assert.equal(await readFile(join(siteDir, 'index.html'), 'utf8'), home);
+  await assert.rejects(publishSnapshot({ ...settings, async prepare({ contentDir, publicDir }) {
+    await writeFile(join(contentDir, 'new.md'), markdown);
+    candidateAssets = join(publicDir, '..', 'site');
+  }, async verify() {
+    // Fail while installing dist after replacing both working directories.
+    await rm(candidateAssets, { recursive: true });
+  } }), { code: 'ENOENT' });
+  assert.equal(await readFile(join(workingCopy.contentDir, 'one.md'), 'utf8'), markdown);
+  assert.equal(await readFile(join(workingCopy.assetsDir, 'one.txt'), 'utf8'), '持久资源');
+  assert.equal(await readFile(join(siteDir, 'index.html'), 'utf8'), home);
+  await publishSnapshot({ ...settings, async prepare() {} });
+  await assert.rejects(readFile(join(workingCopy.contentDir, 'one.md')), { code: 'ENOENT' });
+  await assert.rejects(readFile(join(workingCopy.assetsDir, 'one.txt')), { code: 'ENOENT' });
+  assert.match(await readFile(join(siteDir, 'index.html'), 'utf8'), /还没有发布文章/);
 });

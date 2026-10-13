@@ -1,5 +1,6 @@
 # build output
 dist/
+dist.lock/
 # generated types
 .astro/
 
@@ -18,6 +19,13 @@ pnpm-debug.log*
 .env.production
 .env.*
 !.env.example
+.envrc
+
+# private keys and credential certificates
+*.pem
+*.key
+*.p12
+*.pfx
 
 # macOS-specific files
 .DS_Store
@@ -25,5 +33,13 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 
-# local verification artifacts
+# local sync state and isolated builds
+.cache/
 .artifacts/
+
+# Notion owns these generated working files; CI recreates them from the API.
+src/content/blog/*
+!src/content/blog/.gitkeep
+src/content/blog.lock/
+public/article-assets/
+public/article-assets.lock/

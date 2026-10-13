@@ -1,6 +1,6 @@
 # Notion 同步、文章详情与按年归档规格
 
-2026-10-12：需求及测试入口已确认。本文是正式规格入口；[GitHub Issue #1](https://github.com/0x3a0/my-blog/issues/1)承载完整规格。实现及剩余真实验收见[交接](./FURTHER_NOTES.md)和[验收记录](../NOTION_ACCEPTANCE.md)。
+2026-10-13：已确认改为每次完整读取勾选集合、构建并替换全站，无发布清单或逐篇撤回确认。本地章节记录最新约定；[GitHub Issue #1](https://github.com/0x3a0/my-blog/issues/1)为原始规格，尚未同步本轮调整。实现及剩余真实验收见[交接](./FURTHER_NOTES.md)和[验收记录](../NOTION_ACCEPTANCE.md)。
 
 ## Problem Statement
 
@@ -30,4 +30,4 @@
 
 ## Further Notes
 
-见[交接状态](./FURTHER_NOTES.md)、[需求记录](../NOTION_REQUIREMENTS.md)与[API 只读核实](../NOTION_API_READING.md)。实现任务已发布为 #2–#8。
+见[交接状态](./FURTHER_NOTES.md)、[需求记录](../NOTION_REQUIREMENTS.md)与[SDK 读取流程](../NOTION_API_READING.md)。实现任务已发布为 #2–#8。

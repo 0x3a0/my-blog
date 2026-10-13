@@ -9,7 +9,7 @@ if (!phrases.length) throw new Error('HeroWords 至少需要一个非空词组')
     {phrases.map(phrase => <span class="invisible [grid-area:1/1]">&lt;{phrase}/&gt;<span class="ml-1 font-normal">|</span></span>)}
     <span class="absolute inset-0">
       <span>&lt;</span>
-      <span data-text>{phrases[0]}</span>
+      <span data-text></span>
       <span class="ml-0.5 mr-0.5 animate-cursor-blink font-normal text-accent motion-reduce:animate-none [&[hidden]]:hidden" data-cursor hidden>|</span>
       <span>/&gt;</span>
     </span>
@@ -54,7 +54,7 @@ if (!phrases.length) throw new Error('HeroWords 至少需要一个非空词组')
     private stop() {
       window.clearTimeout(this.timer);
       this.running = false;
-      if (this.text) this.text.textContent = this.words[0]?.join('') ?? '';
+      if (this.text) this.text.textContent = this.preference.matches || this.words.length === 1 ? this.words[0]?.join('') ?? '' : '';
       if (this.cursor) this.cursor.hidden = true;
     }
 
@@ -67,7 +67,7 @@ if (!phrases.length) throw new Error('HeroWords 至少需要一个非空词组')
       this.length = 0;
       this.deleting = false;
       if (this.text) this.text.textContent = '';
-      if (this.cursor) this.cursor.hidden = false;
+      if (this.cursor) this.cursor.hidden = true;
       this.timer = window.setTimeout(this.tick, TIMING.initial);
     };
 
@@ -76,6 +76,7 @@ if (!phrases.length) throw new Error('HeroWords 至少需要一个非空词组')
       const phrase = this.words[this.word]!;
       this.length += this.deleting ? -1 : 1;
       this.text.textContent = phrase.slice(0, this.length).join('');
+      if (this.cursor) this.cursor.hidden = false;
       let delay = this.deleting ? TIMING.deleting : TIMING.typing;
       if (!this.deleting && this.length === phrase.length) {
         this.deleting = true;

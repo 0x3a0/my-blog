@@ -24,7 +24,7 @@ function source() {
   return {
     pages, bodies,
     async retrieveDatabase() { return { id: databaseId, data_sources: [{ id: sourceId, name: 'My blog' }] }; },
-    async retrieveDataSource() { return { id: sourceId, properties: {
+    async retrieveDataSource() { return { id: sourceId, parent: { type: 'database_id', database_id: databaseId }, properties: {
       Name: { type: 'title' }, 'to-blog-site': { type: 'checkbox' }, Published: { type: 'date' },
     } }; },
     async query() { return { results: structuredClone(pages), has_more: false, next_cursor: null }; },
@@ -36,9 +36,9 @@ function source() {
   };
 }
 async function workspace(t: { after(fn: () => Promise<void>): void }) {
-  await mkdir('.artifacts', { recursive: true });
-  const path = await mkdtemp(join(process.cwd(), '.artifacts/notion-test-'));
-  assert.ok(path.startsWith(join(process.cwd(), '.artifacts') + (process.platform === 'win32' ? '\\' : '/')));
+  await mkdir('.cache/tests', { recursive: true });
+  const path = await mkdtemp(join(process.cwd(), '.cache/tests/notion-test-'));
+  assert.ok(path.startsWith(join(process.cwd(), '.cache/tests') + (process.platform === 'win32' ? '\\' : '/')));
   t.after(() => rm(path, { recursive: true, force: true }));
   return { outputDir: join(path, 'published'), databaseId, siteUrl: 'https://example.com', siteBase: '/my-blog/' };
 }
@@ -69,6 +69,27 @@ test('仅勾选文章完整同步到首页、归档、详情，改标题更新�
   assert.match(updated, /最新标题/);
   assert.match(updated, /最新保存内容/);
   assert.doesNotMatch(updated, /云端保存的正文/);
+});
+
+test('固定数据源跳过数据库读取并校验本次来源，不生成发布清单', async t => {
+  const options = await workspace(t);
+  const notion = source();
+  await syncNotion({ ...options, source: notion });
+  const statePath = join(options.outputDir, 'site/blog-publication.json');
+  await assert.rejects(readFile(statePath), { code: 'ENOENT' });
+  await assert.rejects(readFile(join(options.outputDir, 'manifest.json')), { code: 'ENOENT' });
+  const direct = { ...notion, async retrieveDatabase() { throw new Error('不应读取数据库'); } };
+  notion.bodies.set(articleId, '固定数据源读取的最新正文');
+  await syncNotion({ ...options, databaseId: undefined, dataSourceId: sourceId, source: direct });
+  await assert.rejects(readFile(statePath), { code: 'ENOENT' });
+  const detailPath = join(options.outputDir, 'site/blog', articleId, 'index.html');
+  const latest = await readFile(detailPath, 'utf8');
+  assert.match(latest, /固定数据源读取的最新正文/);
+  await assert.rejects(syncNotion({ ...options, databaseId: articleId, dataSourceId: sourceId, source: direct }), /不属于/);
+  await assert.rejects(syncNotion({ ...options, databaseId: undefined, dataSourceId: articleId, source: direct }), /数据源身份/);
+  await assert.rejects(syncNotion({ ...options, databaseId: undefined, source: direct }), /DATA_SOURCE_ID/);
+  assert.equal(await readFile(detailPath, 'utf8'), latest);
+  await assert.rejects(readFile(statePath), { code: 'ENOENT' });
 });
 
 test('属性清空、缺省、未来日期及跨年时间按作者 Published 展示', async t => {
@@ -204,7 +225,7 @@ test('列表内的提示框保留所属结构，日期提及保留时间、时�
   assert.match(html, /2026-10-12 – 2026-10-15/);
 });
 
-test('撤回需要明确证据；混合同步失败保留整站，空正文和可信空集合可提交', async t => {
+test('全量结果替换旧站点；混合同步失败保留整站，空正文和完整空集合可提交', async t => {
   const options = await workspace(t);
   const notion = source();
   const moved = page('44444444-4444-4444-8444-444444444444', '移出的文章');
@@ -215,8 +236,8 @@ test('撤回需要明确证据；混合同步失败保留整站，空正文和�
   const homePath = join(options.outputDir, 'site/index.html');
   const original = await readFile(detailPath, 'utf8');
   const home = await readFile(homePath, 'utf8');
-  const unreadable = { ...notion, async query() { return { results: [], has_more: false, next_cursor: null }; }, async retrievePage() { throw new Error('HTTP 404 permission revoked'); } };
-  await assert.rejects(syncNotion({ ...options, source: unreadable }), /撤回.*确认|确认.*撤回/);
+  const unreadable = { ...notion, async query() { throw new Error('HTTP 403'); } };
+  await assert.rejects(syncNotion({ ...options, source: unreadable }), /HTTP 403/);
   assert.equal(await readFile(homePath, 'utf8'), home);
   notion.pages[0].properties['to-blog-site'].checkbox = false;
   const newPage = page('66666666-6666-4666-8666-666666666666', '新文章');
@@ -226,14 +247,17 @@ test('撤回需要明确证据；混合同步失败保留整站，空正文和�
   assert.equal(await readFile(homePath, 'utf8'), home);
   notion.bodies.set(newPage.id, '');
   moved.parent.data_source_id = '77777777-7777-4777-8777-777777777777'; trashed.in_trash = true;
-  const withdrawalSource = { ...notion, async query() { return { results: structuredClone(notion.pages.filter(p => p.parent.data_source_id === sourceId && !p.in_trash)), has_more: false, next_cursor: null }; } };
+  const withdrawalSource = { ...notion, async retrievePage(id: string) {
+    if ([articleId, moved.id, trashed.id].includes(id)) throw new Error('已不选中的旧文章不得请求');
+    return notion.retrievePage(id);
+  }, async query() { return { results: structuredClone(notion.pages.filter(p => p.parent.data_source_id === sourceId && !p.in_trash)), has_more: false, next_cursor: null }; } };
   await syncNotion({ ...options, source: withdrawalSource });
   for (const id of [articleId, moved.id, trashed.id]) await assert.rejects(readFile(join(options.outputDir, 'site/blog', id, 'index.html')), { code: 'ENOENT' });
   const emptyPath = join(options.outputDir, 'site/blog', newPage.id, 'index.html');
   assert.match(await readFile(emptyPath, 'utf8'), /新文章/);
   assert.doesNotMatch(await readFile(emptyPath, 'utf8'), /范围外/);
-  newPage.properties['to-blog-site'].checkbox = false;
-  await syncNotion({ ...options, source: withdrawalSource });
+  const emptySource = { ...notion, async query() { return { results: [], has_more: false, next_cursor: null }; }, async retrievePage() { throw new Error('旧文章不可读也无需请求'); } };
+  await syncNotion({ ...options, source: emptySource });
   assert.match(await readFile(homePath, 'utf8'), /还没有发布文章/);
   assert.match(await readFile(join(options.outputDir, 'site/blogs/index.html'), 'utf8'), /还没有发布文章/);
   await assert.rejects(readFile(emptyPath), { code: 'ENOENT' });
@@ -286,7 +310,7 @@ test('完整分页与一致版本才可提交，缺失字段、游标异常和�
     async () => ({ results: [], has_more: false, next_cursor: null, request_status: { type: 'incomplete' } }),
     async () => ({ results: [notion.pages[0]], has_more: true, next_cursor: 'repeated' }),
   ]) await assert.rejects(syncNotion({ ...options, source: { ...notion, query } }), /不完整|分页/);
-  const missingSelection = { ...notion, async retrieveDataSource() { return { id: sourceId, properties: { Name: { type: 'title' } } }; } };
+  const missingSelection = { ...notion, async retrieveDataSource() { return { id: sourceId, parent: { type: 'database_id', database_id: databaseId }, properties: { Name: { type: 'title' } } }; } };
   await assert.rejects(syncNotion({ ...options, source: missingSelection }), /to-blog-site/);
   let changed = false;
   const changedOnce = { ...notion, async readMarkdown(id: string) {
@@ -364,7 +388,8 @@ test('首页最新五篇与跨年归档一致，同日期顺序稳定且旧年�
   await syncNotion({ ...options, source: notion });
   const home = await readFile(join(options.outputDir, 'site/index.html'), 'utf8');
   const archive = await readFile(join(options.outputDir, 'site/blogs/index.html'), 'utf8');
-  assert.match(home, />blogs<\/a>/);
+  assert.match(home, /href="\/my-blog\/blogs\/">Blogs<\/a>/);
+  assert.match(home, /href="\/my-blog\/" aria-current="page">Home<\/a>/);
   for (const index of [4,2,3,1,5]) assert.match(home, new RegExp('文章' + index));
   assert.doesNotMatch(home, /文章0|文章6|只在详情展示的正文/);
   assert.ok(home.indexOf('文章2') < home.indexOf('文章3'));

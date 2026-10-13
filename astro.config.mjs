@@ -16,6 +16,10 @@ export default defineConfig({
   markdown: {
     shikiConfig: { theme: 'github-light' },
   },
-  vite: { plugins: [tailwindcss()] },
+  vite: {
+    plugins: [tailwindcss()],
+    // Watching generated directories prevents their replacement on Windows.
+    server: { watch: { ignored: ['**/.cache', '**/.cache/**', '**/.astro', '**/.astro/**', '**/src/content/blog', '**/src/content/blog/**', '**/public/article-assets', '**/public/article-assets/**'] } },
+  },
 });
 

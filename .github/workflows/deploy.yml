@@ -5,12 +5,7 @@ on:
   schedule:
     # 22:00 UTC is 06:00 the following day in Asia/Shanghai.
     - cron: '0 22 * * *'
-  workflow_dispatch:
-    inputs:
-      initialize:
-        description: '首次接入：线上尚无 Notion 发布清单时允许初始化'
-        type: boolean
-        default: false
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -40,14 +35,13 @@ jobs:
           node-version: '24'
           package-manager: pnpm@12.4.1
           build-cmd: pnpm run notion:publish
-          out-dir: .artifacts/notion-published/site
+          out-dir: dist
         env:
           SITE_URL: ${{ steps.pages.outputs.origin }}
           SITE_BASE: ${{ steps.pages.outputs.base_path || '/' }}
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_DATABASE_ID: ${{ vars.NOTION_DATABASE_ID }}
           NOTION_DATA_SOURCE_ID: ${{ vars.NOTION_DATA_SOURCE_ID }}
-          NOTION_INITIALIZE: ${{ github.event_name == 'workflow_dispatch' && inputs.initialize && 'true' || 'false' }}
 
   deploy:
     needs: build

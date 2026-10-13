@@ -6,16 +6,17 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "astro dev",
+    "dev": "node --env-file-if-exists=.env scripts/dev.ts",
     "build": "astro check && astro build",
     "preview": "astro preview",
     "astro": "astro",
     "test": "node --test tests/*.test.ts",
     "check": "astro check",
     "notion:sync": "node --env-file-if-exists=.env scripts/sync-notion.ts",
-    "notion:publish": "pnpm check && node --env-file-if-exists=.env scripts/sync-notion.ts --restore-published"
+    "notion:publish": "pnpm check && pnpm notion:sync"
   },
   "dependencies": {
+    "@notionhq/client": "5.27.0",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.3.5",
     "rehype-parse": "^9.0.1",

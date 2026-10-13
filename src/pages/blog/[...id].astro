@@ -11,13 +11,12 @@ const { post } = Astro.props;
 const { Content, headings } = await render(post);
 ---
 <BaseLayout title={post.data.title} description={post.data.description}>
-  <article class="mx-auto max-w-5xl">
+  <article>
     <header class="mb-12 max-w-3xl">
       <a class="link link-hover text-sm text-base-content/60" href={withBase('blogs/')}>← 全部文章</a>
       <h1 class="mt-6 text-3xl font-semibold tracking-tight md:text-5xl md:leading-tight">{post.data.title}</h1>
       <div class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-base-content/60">
         <span>发布于 <time datetime={post.data.pubDate.toISOString()}>{formatDate(post.data.pubDate)}</time></span>
-        {post.data.updatedDate && <span>更新于 <time datetime={post.data.updatedDate.toISOString()}>{formatDate(post.data.updatedDate)}</time></span>}
         <span class="badge badge-ghost badge-sm">{post.data.category || '未分组'}</span>
       </div>
     </header>

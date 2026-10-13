@@ -7,6 +7,7 @@ import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkStringify from 'remark-stringify';
 import type { Root, RootContent, Definition } from 'mdast';
+import { normalizeNotionMarkdown } from './notion-markdown.ts';
 
 const markdown = unified().use(remarkParse).use(remarkGfm).use(remarkStringify);
 
@@ -26,9 +27,28 @@ function imageExtension(bytes: Uint8Array, contentType: string) {
   throw new Error('必需图片格式不支持或内容校验失败。');
 }
 
-export async function prepareContent(input: { body: string; id: string; source: { image(url: string): Promise<{ bytes: Uint8Array; contentType: string }> }; publicDir: string; siteBase: string; imageCache: Map<string, string> }) {
-  const body = input.body.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+function captions(node: Root | RootContent) {
+  if (!('children' in node)) return;
+  for (let i = node.children.length - 1; i >= 0; i--) {
+    const child = node.children[i];
+    captions(child);
+    if (child.type === 'paragraph' && child.children.length === 1 && (child.children[0].type === 'image' || child.children[0].type === 'imageReference') && child.children[0].alt) {
+      if (node.type === 'root' || node.type === 'blockquote' || node.type === 'listItem') {
+        node.children.splice(i + 1, 0, { type: 'paragraph', children: [{ type: 'text', value: child.children[0].alt }] });
+      }
+    }
+  }
+}
+
+export async function prepareContent(input: { body: string; id: string; published?: Map<string, string>; source: { image(url: string): Promise<{ bytes: Uint8Array; contentType: string }> }; publicDir: string; siteBase: string; imageCache: Map<string, string> }) {
+  let body = input.body.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  if (input.published) {
+    try { body = await normalizeNotionMarkdown(body); } catch (error) {
+      throw new Error(`文章 ${input.id}：${error instanceof Error ? error.message : '正文转换失败。'}`);
+    }
+  }
   const tree = markdown.parse(body);
+  if (input.published) captions(tree);
   const definitions = new Map<string, Definition>();
   visit(tree, node => { if (node.type === 'definition') definitions.set(node.identifier.toLowerCase(), node); });
   const imageUrls = new Set<string>();
@@ -70,6 +90,16 @@ export async function prepareContent(input: { body: string; id: string; source: 
     if (node.type === 'image') node.url = replacements.get(node.url) || node.url;
     if (node.type === 'definition' && replacements.has(node.url)) node.url = replacements.get(node.url)!;
     if ((node.type === 'link' || node.type === 'definition') && /^(?:javascript|data|vbscript):/i.test(node.url)) throw new Error(`文章 ${input.id} 存在无法发布的链接。`);
+    if (input.published && (node.type === 'link' || node.type === 'definition')) {
+      try {
+        const url = new URL(node.url);
+        if (/^(?:www\.)?notion\.(?:so|site)$/.test(url.hostname) && !url.hash) {
+          const id = url.pathname.match(/([0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/?$/i)?.[1]?.replaceAll('-', '').toLowerCase();
+          const route = id && input.published.get(id);
+          if (route) node.url = route;
+        }
+      } catch { /* Relative and non-web references keep their original meaning. */ }
+    }
   });
   return { body: markdown.stringify(tree) };
 }

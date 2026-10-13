@@ -7,7 +7,7 @@ const posts = await publishedPosts();
 const years = [...new Set(posts.map(post => postYear(post.data.pubDate)))].sort((a, b) => b - a);
 ---
 <BaseLayout title="全部文章" description="按年份浏览所有博客文章。">
-  <section class="mx-auto max-w-5xl" aria-labelledby="archive-title">
+  <section aria-labelledby="archive-title">
     <h1 id="archive-title" class="mb-12 text-3xl font-semibold tracking-tight md:mb-20 md:text-4xl">全部文章</h1>
     {years.length === 0 && <p class="text-base-content/60">还没有发布文章。</p>}
     {years.map(year => <section class="mb-16 grid gap-5 md:mb-24 md:grid-cols-[8rem_minmax(0,1fr)] md:gap-12" aria-labelledby={`year-${year}`}>

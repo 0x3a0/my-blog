@@ -1,11 +1,8 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'astro/zod';
-import { publishSnapshot } from './index.ts';
+import { publishSnapshot, type WorkingCopy } from './index.ts';
 import { prepareContent } from './content.ts';
-import { convertNotionMarkdown } from './notion-markdown.ts';
-import { notionIdSchema as uuid, publicationSchema, type Publication } from './notion-state.ts';
 
 export interface NotionSource {
   retrieveDatabase(id: string): Promise<unknown>;
@@ -18,14 +15,16 @@ export interface NotionSource {
   image(url: string): Promise<{ bytes: Uint8Array; contentType: string }>;
 }
 export interface NotionSyncOptions {
-  databaseId: string;
+  databaseId?: string;
   dataSourceId?: string;
   source: NotionSource;
-  outputDir: string;
+  outputDir?: string;
+  siteDir?: string;
+  workingCopy?: WorkingCopy;
   siteBase: string;
   siteUrl: string;
-  previousPublication?: Publication;
 }
+const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).transform(value => value.toLowerCase());
 const property = z.looseObject({ type: z.string() });
 const pageSchema = z.object({
   object: z.literal('page'), id: uuid, url: z.string(), last_edited_time: z.iso.datetime({ offset: true }),
@@ -35,7 +34,10 @@ const pageSchema = z.object({
 });
 type Page = z.infer<typeof pageSchema>;
 const databaseSchema = z.object({ id: uuid, data_sources: z.array(z.object({ id: uuid, name: z.string() })) });
-const dataSourceSchema = z.object({ id: uuid, properties: z.record(z.string(), property) });
+const dataSourceSchema = z.object({
+  id: uuid, parent: z.object({ type: z.literal('database_id'), database_id: uuid }),
+  properties: z.record(z.string(), property),
+});
 const listSchema = z.object({
   results: z.array(pageSchema), has_more: z.boolean(), next_cursor: z.string().nullable(),
   request_status: z.object({ type: z.string() }).optional(),
@@ -117,7 +119,7 @@ async function metadata(source: NotionSource, page: Page) {
   if (!title) throw new Error(`文章 ${page.id} 的标题为空。`);
   const published = page.properties.Published;
   if (published?.type !== 'date') throw new Error(`文章 ${page.id} 的 Published 必须是日期。`);
-  return { title, description: await optionalText(source, page), category: optionalCategory(page), pubDate: publishedDate(published.date, page.id), updatedDate: page.last_edited_time };
+  return { title, description: await optionalText(source, page), category: optionalCategory(page), pubDate: publishedDate(published.date, page.id) };
 }
 
 async function enumerate(source: NotionSource, id: string) {
@@ -200,59 +202,34 @@ export async function syncNotion(options: NotionSyncOptions) {
   let articleCount = 0;
   let verify: (() => Promise<void>) | undefined;
   try {
-    const databaseId = uuid.parse(options.databaseId);
+    const configuredDatabaseId = options.databaseId ? uuid.parse(options.databaseId) : undefined;
+    const configuredSourceId = options.dataSourceId ? uuid.parse(options.dataSourceId) : undefined;
+    if (!configuredDatabaseId && !configuredSourceId) throw new Error('请配置 NOTION_DATA_SOURCE_ID 或 NOTION_DATABASE_ID。');
     return { ...await publishSnapshot({ ...options, verify: async () => { await verify?.(); }, async prepare({ contentDir, publicDir }) {
-      const database = databaseSchema.parse(await options.source.retrieveDatabase(databaseId));
-      if (database.id !== databaseId) throw new Error('Notion 数据库身份不匹配。');
-      const requestedId = options.dataSourceId ? uuid.parse(options.dataSourceId) : undefined;
-      const dataSource = requestedId ? database.data_sources.find(s => s.id === requestedId)
-        : database.data_sources.length === 1 ? database.data_sources[0] : undefined;
-      if (!dataSource) throw new Error('请明确配置数据库所属的 NOTION_DATA_SOURCE_ID。');
-      const schema = dataSourceSchema.parse(await options.source.retrieveDataSource(dataSource.id));
-      if (schema.id !== dataSource.id || schema.properties['to-blog-site']?.type !== 'checkbox') throw new Error('Notion 文章库缺少 to-blog-site 复选框，请先配置。');
+      let sourceId = configuredSourceId;
+      if (!sourceId) {
+        const database = databaseSchema.parse(await options.source.retrieveDatabase(configuredDatabaseId!));
+        if (database.id !== configuredDatabaseId) throw new Error('Notion 数据库身份不匹配。');
+        if (database.data_sources.length !== 1) throw new Error('请明确配置数据库所属的 NOTION_DATA_SOURCE_ID。');
+        sourceId = database.data_sources[0].id;
+      }
+      const dataSource = dataSourceSchema.parse(await options.source.retrieveDataSource(sourceId));
+      if (dataSource.id !== sourceId) throw new Error('Notion 数据源身份不匹配。');
+      const databaseId = dataSource.parent.database_id;
+      if (configuredDatabaseId && databaseId !== configuredDatabaseId) throw new Error('Notion 数据源不属于配置的数据库。');
+      if (dataSource.properties['to-blog-site']?.type !== 'checkbox') throw new Error('Notion 文章库缺少 to-blog-site 复选框，请先配置。');
       const pages = await enumerate(options.source, dataSource.id);
       const chosen = [...pages.values()].filter(selected);
-      const fingerprint = createHash('sha256').update(databaseId + ':' + dataSource.id).digest('hex');
-      let previous: unknown;
-      if (options.previousPublication) {
-        const supplied = publicationSchema.parse(options.previousPublication);
-        if (supplied.source !== fingerprint) throw new Error('线上文章库身份与本次来源不一致，停止发布。');
-        previous = { databaseId, dataSourceId: dataSource.id, articles: supplied.articles };
-      } else {
-        try { previous = JSON.parse(await readFile(join(options.outputDir, 'manifest.json'), 'utf8')); } catch (error) {
-          if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-        }
-      }
-      if (previous) {
-        const old = z.object({ databaseId: uuid, dataSourceId: uuid, articles: z.array(uuid) }).parse(previous);
-        if (old.databaseId !== databaseId || old.dataSourceId !== dataSource.id) throw new Error('同步来源与旧快照不一致，不能据此撤回文章。');
-        for (const id of old.articles.filter(id => !chosen.some(p => p.id === id))) {
-          let page: Page;
-          try { page = pageSchema.parse(await options.source.retrievePage(id)); } catch {
-            throw new Error(`文章 ${id} 无法确认撤回原因；404 或权限变化不能作为撤回依据。`);
-          }
-          if (page.id !== id) throw new Error(`文章 ${id} 的撤回响应身份不匹配。`);
-          const moved = page.parent.type !== 'data_source_id' || page.parent.data_source_id !== dataSource.id;
-          if (!moved && !page.in_trash && !page.archived && selected(page)) throw new Error(`文章 ${id} 仍允许发布，但未出现在完整列表中，无法确认撤回。`);
-        }
-      }
       const imageCache = new Map<string, string>();
       const published = new Map(chosen.map(p => [p.id.replaceAll('-', ''), options.siteBase.replace(/\/?$/, '/') + 'blog/' + p.id + '/']));
       const captured = new Map<string, Page>();
       for (const page of chosen) {
         const article = await readArticle(options.source, page.id, dataSource.id);
         captured.set(page.id, article.page);
-        let body: string;
-        try { body = await convertNotionMarkdown(article.body, published); } catch (error) {
-          throw new Error(`文章 ${page.id}：${error instanceof Error ? error.message : '正文转换失败。'}`);
-        }
-        const content = await prepareContent({ id: page.id, body, source: options.source, publicDir, siteBase: options.siteBase, imageCache });
+        const content = await prepareContent({ id: page.id, body: article.body, published, source: options.source, publicDir, siteBase: options.siteBase, imageCache });
         await writeFile(join(contentDir, page.id + '.md'), '---\n' + JSON.stringify(article.data) + '\n---\n' + content.body);
       }
       articleCount = chosen.length;
-      await writeFile(join(contentDir, '..', 'manifest.json'), JSON.stringify({ databaseId, dataSourceId: dataSource.id, articles: chosen.map(p => p.id) }, null, 2));
-      // Only already-public article IDs and a one-way source fingerprint leave the private snapshot.
-      await writeFile(join(publicDir, 'blog-publication.json'), JSON.stringify({ version: 1, source: fingerprint, articles: chosen.map(p => p.id) }));
       verify = async () => {
         const current = [...(await enumerate(options.source, dataSource.id)).values()].filter(selected);
         if (current.length !== captured.size || current.some(p => !captured.has(p.id))) throw new Error('Notion 发布集合在同步期间发生变化，请重试。');

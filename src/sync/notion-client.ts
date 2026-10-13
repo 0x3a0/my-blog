@@ -1,44 +1,47 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { Client, isHTTPResponseError } from '@notionhq/client';
 import type { NotionSource } from './notion.ts';
 
 /** Credentials are attached only to api.notion.com, never to article images. */
 export function createNotionSource(token: string): NotionSource {
   if (!token.trim()) throw new Error('请配置 NOTION_TOKEN 读取凭据。');
   let nextRequest = 0;
-  async function request(path: string, body?: Record<string, unknown>): Promise<unknown> {
-    for (let attempt = 0; attempt < 3; attempt++) {
+  const client = new Client({
+    auth: token.trim(), notionVersion: '2026-03-11', timeoutMs: 30_000,
+    retry: { maxRetries: 2, maxRetryDelayMs: 60_000 },
+    // Remote error messages can contain private content; report only safe errors below.
+    logger: () => {},
+    async fetch(url, init) {
       await delay(Math.max(0, nextRequest - Date.now()));
       nextRequest = Date.now() + 350;
-      let response: Response;
-      try {
-        response = await fetch('https://api.notion.com/v1/' + path, {
-          method: body ? 'POST' : 'GET', redirect: 'error',
-          headers: { Authorization: `Bearer ${token.trim()}`, 'Notion-Version': '2026-03-11', 'Content-Type': 'application/json' },
-          body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30_000),
-        });
-      } catch { throw new Error('Notion 网络读取失败或超时；本次未发布。'); }
-      if (response.ok) {
-        try { return await response.json(); } catch { throw new Error('Notion 返回了无效的响应内容。'); }
+      return fetch(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(30_000) });
+    },
+  });
+  async function read<T>(operation: () => Promise<T>, query = false): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try { return await operation(); } catch (error) {
+        if (!isHTTPResponseError(error)) throw new Error('Notion 网络、响应解析失败或超时；本次未发布。');
+        // The SDK does not retry POST server errors. Data-source queries are read-only.
+        if (query && attempt < 2 && [500, 503, 504].includes(error.status)) {
+          await delay((attempt + 1) * 1000); continue;
+        }
+        throw new Error(`Notion 读取失败：HTTP ${error.status}；请检查读取授权与资源 ID。`);
       }
-      if (attempt < 2 && (response.status === 429 || response.status >= 500)) {
-        const wait = Number(response.headers.get('retry-after') || (attempt + 1));
-        if (Number.isFinite(wait) && wait >= 0 && wait <= 60) { await delay(wait * 1000); continue; }
-      }
-      throw new Error(`Notion 读取失败：HTTP ${response.status}；请检查读取授权与资源 ID。`);
     }
-    throw new Error('Notion 读取重试耗尽。');
   }
   return {
-    retrieveDatabase: id => request(`databases/${id}`),
-    retrieveDataSource: id => request(`data_sources/${id}`),
-    query: (id, cursor) => request(`data_sources/${id}/query`, {
-      filter: { property: 'to-blog-site', checkbox: { equals: true } }, page_size: 100,
-      ...(cursor ? { start_cursor: cursor } : {}),
-    }),
-    retrievePage: id => request(`pages/${id}`),
-    readMarkdown: id => request(`pages/${id}/markdown`),
-    retrieveBlock: id => request(`blocks/${id}`),
-    readProperty: (id, property, cursor) => request(`pages/${id}/properties/${encodeURIComponent(decodeURIComponent(property))}?page_size=100${cursor ? '&start_cursor=' + encodeURIComponent(cursor) : ''}`),
+    retrieveDatabase: id => read(() => client.databases.retrieve({ database_id: id })),
+    retrieveDataSource: id => read(() => client.dataSources.retrieve({ data_source_id: id })),
+    query: (id, cursor) => read(() => client.dataSources.query({
+      data_source_id: id, filter: { property: 'to-blog-site', checkbox: { equals: true } },
+      page_size: 100, start_cursor: cursor,
+    }), true),
+    retrievePage: id => read(() => client.pages.retrieve({ page_id: id })),
+    readMarkdown: id => read(() => client.pages.retrieveMarkdown({ page_id: id })),
+    retrieveBlock: id => read(() => client.blocks.retrieve({ block_id: id })),
+    readProperty: (id, property, cursor) => read(() => client.pages.properties.retrieve({
+      page_id: id, property_id: property, page_size: 100, start_cursor: cursor,
+    })),
     async image(url) {
       try {
         const address = new URL(url);

@@ -30,7 +30,7 @@ const articles: ArticlePreview[] = posts.map(({ id, data }) => ({
       </div>
     </div>
   </section>
-  <section class="max-w-225" aria-labelledby="latest-articles-title">
+  <section aria-labelledby="latest-articles-title">
     {articles.length > 0 ? <ArticleList articles={articles} /> : <p class="py-12 text-base-content/60">还没有发布文章。</p>}
   </section>
 </BaseLayout>

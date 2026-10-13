@@ -1,12 +1,9 @@
 import { unified } from 'unified';
-import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkStringify from 'remark-stringify';
 import rehypeParse from 'rehype-parse';
 import rehypeRemark from 'rehype-remark';
-import type { Root, RootContent } from 'mdast';
 
-const markdown = unified().use(remarkParse).use(remarkGfm).use(remarkStringify);
 const table = unified().use(rehypeParse, { fragment: true }).use(rehypeRemark).use(remarkGfm).use(remarkStringify);
 
 function inline(text: string) {
@@ -39,7 +36,7 @@ function inline(text: string) {
   return text.replace(new RegExp(marker + '(\\d+)TOKEN', 'g'), (_all, index: string) => literal[Number(index)]);
 }
 
-async function normalMarkdown(body: string) {
+export async function normalizeNotionMarkdown(body: string) {
   const lines = body.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').split('\n');
   const output: string[] = [];
   const wrappers: { tag: string; indent: number }[] = [];
@@ -98,37 +95,4 @@ async function normalMarkdown(body: string) {
   }
   if (wrappers.length || fence) throw new Error('正文标签或代码块未闭合。');
   return output.join('\n');
-}
-
-function rewriteLinks(node: Root | RootContent, published: Map<string, string>) {
-  if (node.type === 'link' || node.type === 'definition') {
-    try {
-      const url = new URL(node.url);
-      if (/^(?:www\.)?notion\.(?:so|site)$/.test(url.hostname) && !url.hash) {
-        const id = url.pathname.match(/([0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/?$/i)?.[1]?.replaceAll('-', '').toLowerCase();
-        const route = id && published.get(id);
-        if (route) node.url = route;
-      }
-    } catch { /* Relative and non-web references keep their original meaning. */ }
-  }
-  if ('children' in node) for (const child of node.children) rewriteLinks(child, published);
-}
-function captions(node: Root | RootContent) {
-  if (!('children' in node)) return;
-  for (let i = node.children.length - 1; i >= 0; i--) {
-    const child = node.children[i];
-    captions(child);
-    if (child.type === 'paragraph' && child.children.length === 1 && (child.children[0].type === 'image' || child.children[0].type === 'imageReference') && child.children[0].alt) {
-      const caption = child.children[0].alt;
-      if (node.type === 'root' || node.type === 'blockquote' || node.type === 'listItem') {
-        node.children.splice(i + 1, 0, { type: 'paragraph', children: [{ type: 'text', value: caption }] });
-      }
-    }
-  }
-}
-export async function convertNotionMarkdown(body: string, published: Map<string, string>) {
-  const tree = markdown.parse(await normalMarkdown(body));
-  rewriteLinks(tree, published);
-  captions(tree);
-  return markdown.stringify(tree);
 }
