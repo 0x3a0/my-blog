@@ -16,6 +16,8 @@
 
 Settings → Pages 的 Source 选择 GitHub Actions；Actions 工作流需启用。不要在 Variables 中保存 Token。本地 `.env` 不会自动传到 GitHub。
 
+`SITE_URL` 与 `SITE_BASE` 由工作流从 Pages 配置自动读取，不需要创建同名 Variables。默认项目地址为 `https://0x3a0.github.io/my-blog/`；本地命令默认使用 `/`，各自同步生成对应路径的文章、图片和完整站点。
+
 ## 首次部署
 
 实现代码进入默认分支后，在 Actions 手动运行 `Deploy to GitHub Pages`。首次与后续运行使用相同全量同步流程，无需初始化选项，也不读取旧站点或发布清单。

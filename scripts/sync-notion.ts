@@ -6,8 +6,8 @@ async function main() {
   const databaseId = process.env.NOTION_DATABASE_ID?.trim();
   const dataSourceId = process.env.NOTION_DATA_SOURCE_ID?.trim();
   if (!dataSourceId && !databaseId) throw new Error('请配置 NOTION_DATA_SOURCE_ID 或 NOTION_DATABASE_ID。');
-  const siteUrl = process.env.SITE_URL || 'https://0x3a0.github.io';
-  const siteBase = process.env.SITE_BASE || '/my-blog/';
+  const siteUrl = process.env.SITE_URL?.trim() || undefined;
+  const siteBase = process.env.SITE_BASE || '/';
   console.log('开始读取 Notion；全部校验和构建成功后才更新本地快照。');
   const result = await syncNotion({
     databaseId, dataSourceId,

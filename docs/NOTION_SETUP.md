@@ -24,10 +24,12 @@
 
 生成文章和图片均受 Git 忽略；文章以 Notion 为来源，本地修改会在下次成功同步被替换。每次完整读取当前勾选集合，不依赖旧文章或发布清单。候选在 `.cache/notion` 中隔离构建，全部校验成功后才更新工作目录和 `dist`；成功或正常失败后清理候选。普通 `pnpm build` 构建当前本地文章，不主动连接 Notion；正式发布使用[每日发布入口](./NOTION_DEPLOYMENT.md)。失败保护见[同步说明](./NOTION_SYNC.md)。
 
-运行 `pnpm dev` 会加载本地 `.env`，直接读取 `src/content/blog` 与 `public`；默认打开 `http://localhost:4321/my-blog/`，具体以终端地址为准。未同步过时终端提示先同步。开发模式不直接请求 Notion；需要本地查看云端修改时先同步，再重启开发服务。已同步内容目录不参与开发文件监听，避免 Windows 阻止目录替换。
+本地同步、开发、构建和预览默认从 `/` 开始，不需要配置 `SITE_URL` 或 `SITE_BASE`；本地 `.env` 只保存 Notion 读取配置。线上工作流从 GitHub Pages 读取域名与基础路径，普通项目站点使用 `/my-blog/`，不将仓库名称写死在本地命令中。
+
+运行 `pnpm dev` 直接启动 `astro dev`，读取 `src/content/blog` 与 `public`；默认打开 `http://localhost:4321/`，具体以终端地址为准。未同步过时先运行 `pnpm notion:sync`。开发模式不直接请求 Notion；需要本地查看云端修改时先同步，再重启开发服务。已同步内容目录不参与开发文件监听，避免 Windows 阻止目录替换。
 
 线上更新无需每天在电脑上运行命令：完成[GitHub 一次性配置](./NOTION_DEPLOYMENT.md)后，GitHub 每日自动拉取、构建并部署；云端生成内容不会自动下载到本地电脑。
 
-本地预览已同步的 `dist` 站点，在 PowerShell 设置 `$env:SITE_BASE='/my-blog/'`，再运行 `pnpm preview`，打开 `http://localhost:4321/my-blog/`。基础路径应与同步时一致；预览不会重新读取 Notion。
+本地预览已同步的 `dist` 站点，直接运行 `pnpm preview`，打开 `http://localhost:4321/`。预览不会重新读取 Notion。此前按 `/my-blog/` 生成的本地文章需要重新同步一次，使正文图片与文章链接改为根路径。
 
 内容支持及失败条件见[规格](./spec/API_CONTRACT.md)与[验收记录](./NOTION_ACCEPTANCE.md)。

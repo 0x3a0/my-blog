@@ -22,6 +22,7 @@ const page={object:'page',id,url:'https://www.notion.so/'+id,last_edited_time:'2
 globalThis.fetch=async (url,options)=>{
   const path=new URL(url).pathname;
   const json=data=>Response.json(data);
+  if(String(url)==='https://images.example.com/article.png')return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64'),{headers:{'content-type':'image/png'}});
   if(new URL(url).hostname!=='api.notion.com')throw new Error('Publication must not request the old website');
   if(process.env.TEST_READ_FAILURE==='true')return new Response('DO-NOT-LOG-REMOTE-SECRET',{status:403});
   if(path==='/v1/databases/'+database)throw new Error('Fixed data source must not retrieve a database');
@@ -32,7 +33,7 @@ globalThis.fetch=async (url,options)=>{
     if(process.env.TEST_EMPTY==='true')return json({results:[],has_more:false,next_cursor:null});
     return json({results:[page],has_more:!body.start_cursor,next_cursor:body.start_cursor?null:'next-page'});
   }
-  if(path.endsWith('/markdown'))return json({markdown:'## 可读正文\\n\\n完整成功后才发布。',truncated:false,unknown_block_ids:[]});
+  if(path.endsWith('/markdown'))return json({markdown:'## 可读正文\\n\\n完整成功后才发布。\\n\\n[本站文章](https://www.notion.so/'+id+')\\n\\n![同步图片](https://images.example.com/article.png)',truncated:false,unknown_block_ids:[]});
   if(path==='/v1/pages/'+id)return json(page);
   throw new Error('Unexpected external API endpoint');
 };
@@ -40,15 +41,34 @@ globalThis.fetch=async (url,options)=>{
   const contentDir = join(workspace, 'src/content/blog');
   const env = { ...process.env, NOTION_TOKEN: 'TEST-SECRET-NEVER-PUBLISH', NOTION_DATABASE_ID: '', NOTION_DATA_SOURCE_ID: '22222222-2222-4222-8222-222222222222', SITE_URL: 'https://example.com', SITE_BASE: '/my-blog/', BLOG_OUT_DIR: siteDir, BLOG_CONTENT_DIR: contentDir, BLOG_PUBLIC_DIR: join(workspace, 'public'), TEST_EMPTY: 'false', TEST_READ_FAILURE: 'false' };
   const args = ['--import', pathToFileURL(fixture).href, 'scripts/sync-notion.ts'];
+  const localEnv: NodeJS.ProcessEnv = { ...env };
+  delete localEnv.SITE_URL;
+  delete localEnv.SITE_BASE;
+  await run(process.execPath, args, { env: localEnv, timeout: 90_000 });
+  const localHome = await readFile(join(siteDir, 'index.html'), 'utf8');
+  const localMarkdown = await readFile(join(contentDir, '33333333-3333-4333-8333-333333333333.md'), 'utf8');
+  assert.match(localHome, /href="\/blog\/33333333-3333-4333-8333-333333333333\/"/);
+  assert.doesNotMatch(localHome, /rel="canonical"|property="og:url"|\/my-blog\//);
+  assert.match(localMarkdown, /\]\(\/blog\/33333333-3333-4333-8333-333333333333\/\)/);
+  const localImage = localMarkdown.match(/\]\((\/article-assets\/[^)]+)\)/)?.[1];
+  assert.ok(localImage);
+  assert.ok((await readFile(join(siteDir, localImage))).length > 0);
   const initial = await run(process.execPath, args, { env, timeout: 90_000 });
   assert.match(initial.stdout, /同步成功：1/);
   const homePath = join(siteDir, 'index.html');
   const home = await readFile(homePath, 'utf8');
   await assert.rejects(readFile(join(siteDir, 'blog-publication.json')), { code: 'ENOENT' });
   assert.match(home, /完整发布的文章/);
+  assert.match(home, /href="https:\/\/example.com\/my-blog\/"/);
+  assert.match(home, /href="\/my-blog\/blog\/33333333-3333-4333-8333-333333333333\/"/);
   const markdownPath = join(contentDir, '33333333-3333-4333-8333-333333333333.md');
   const markdown = await readFile(markdownPath, 'utf8');
   assert.match(markdown, /可读正文/);
+  assert.match(markdown, /\]\(\/my-blog\/blog\/33333333-3333-4333-8333-333333333333\/\)/);
+  const remoteImage = markdown.match(/\]\((\/my-blog\/article-assets\/[^)]+)\)/)?.[1];
+  assert.ok(remoteImage);
+  assert.equal(remoteImage, '/my-blog' + localImage);
+  assert.ok((await readFile(join(siteDir, remoteImage.slice('/my-blog'.length)))).length > 0);
   assert.doesNotMatch(home + initial.stdout, /TEST-SECRET|NOTION_TOKEN/);
   await assert.rejects(run(process.execPath, args, { env: { ...env, TEST_READ_FAILURE: 'true' }, timeout: 90_000 }), error => {
     assert.ok(error instanceof Error && 'stderr' in error);

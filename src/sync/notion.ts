@@ -22,7 +22,7 @@ export interface NotionSyncOptions {
   siteDir?: string;
   workingCopy?: WorkingCopy;
   siteBase: string;
-  siteUrl: string;
+  siteUrl?: string;
 }
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).transform(value => value.toLowerCase());
 const property = z.looseObject({ type: z.string() });

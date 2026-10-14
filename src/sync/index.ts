@@ -12,7 +12,7 @@ export interface SnapshotOptions {
   outputDir?: string;
   siteDir?: string;
   siteBase: string;
-  siteUrl: string;
+  siteUrl?: string;
   workingCopy?: WorkingCopy;
   prepare: (directories: { contentDir: string; publicDir: string }) => Promise<void>;
   verify?: () => Promise<void>;
